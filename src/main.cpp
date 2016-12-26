@@ -29,9 +29,11 @@ typedef enum { role_transmitter = 1, role_receiver } role_e;
 role_e role;
 const long MAX_MILLIS_BEFORE_ERROR_SIGNAL = 10000;
 long lastReceivedPacketTime = 0 - MAX_MILLIS_BEFORE_ERROR_SIGNAL;
-bool lastReceivedData = false;    //Start with relay off
+bool lastReceivedData = LOW;    //Start with relay off
 
 byte failureCount = 0;
+
+void handleReceiverRole(void);
 
 void setup(void) {
   display.initialize();
@@ -54,7 +56,8 @@ void setup(void) {
   printf_begin();
 
   radio.begin();
-  radio.setDataRate(RF24_250KBPS);
+  radio.setDataRate(RF24_2MBPS);
+  radio.setCRCLength(RF24_CRC_8);
   radio.setPALevel(RF24_PA_MAX);
   radio.enableAckPayload();                     // Allow optional ack payloads
   radio.enableDynamicPayloads();                // Ack payloads are dynamic payloads
@@ -124,10 +127,8 @@ void loop(void) {
     radio.read( &ackControl, PACKET_SIZE);
     if (ackControl == controlData) {
       printf("Control packet %lu sent succesfully\n\r", controlData);
-      failureCount = 0;
     } else {
       printf("Control packet %lu send failed\n\r", controlData);
-      failureCount++;
     }
   }
 
@@ -135,47 +136,53 @@ void loop(void) {
   // Receiver role
   //
   if ( role == role_receiver ) {
-    display.print("PEK Receiver");
-    display.setCursor(0,30);
-    display.print("Relay: ");
-
-    long receivedData;
-    uint8_t pipeNum;
-    while( radio.available(&pipeNum)) {              // Read all available payloads
-      radio.read( &receivedData, PACKET_SIZE );
-      radio.writeAckPayload(pipeNum, &receivedData, PACKET_SIZE);
-      printf("Received and ACK'ed %lu \n\r", receivedData);
-      lastReceivedPacketTime = millis();
-
-      if (receivedData >= 0 && receivedData < 256) {
-        if (receivedData==1) {
-          lastReceivedData = true;
-          digitalWrite(functional_pin,HIGH);
-        } else if (receivedData==0) {
-          lastReceivedData = false;
-          digitalWrite(functional_pin,LOW);
-        }
-      }
-    }
-    display.setCursor(40,30);
-    if (lastReceivedData) {
-      display.print("ON");
-    } else {
-      display.print("OFF");
-    }
-
-    unsigned long timeDelta = millis()-lastReceivedPacketTime;
-    printf("Millis since last signal: %lu \n\r", timeDelta);
-    display.setCursor(0,15);
-    display.print("Link: ");
-    display.setCursor(35,15);
-    if ( timeDelta < MAX_MILLIS_BEFORE_ERROR_SIGNAL) {
-      display.print("OK");
-    } else {
-      display.print("NO CONNECTION");
-    }
+    handleReceiverRole();
   }
 
-  // display.pdate is common for receiver and transmitter roles
+}
+
+void handleReceiverRole() {
+  display.print("PEK Receiver");
+  display.setCursor(0,30);
+  display.print("Relay: ");
+
+  long receivedData;
+  bool newPinMode = LOW;
+  uint8_t pipeNum;
+  while( radio.available(&pipeNum)) {              // Read all available payloads
+    radio.read( &receivedData, PACKET_SIZE );
+    radio.writeAckPayload(pipeNum, &receivedData, PACKET_SIZE);
+    printf("Received and ACK'ed %lu \n\r", receivedData);
+    lastReceivedPacketTime = millis();
+
+    if (receivedData >= 0 && receivedData < 256) {
+      if (receivedData==1) {
+        newPinMode = HIGH;
+      } else if (receivedData==0) {
+        newPinMode = LOW;
+      }
+    }
+  }
+  display.setCursor(40,30);
+
+  if (newPinMode==HIGH) {
+    display.print("ON");
+  } else {
+    display.print("OFF");
+  }
+  if (lastReceivedData!=newPinMode) {
+    digitalWrite(functional_pin, newPinMode);
+  }
+  lastReceivedData = newPinMode;
+  unsigned long timeDelta = millis()-lastReceivedPacketTime;
+  printf("Millis since last signal: %lu \n\r", timeDelta);
+  display.setCursor(0,15);
+  display.print("Link: ");
+  display.setCursor(35,15);
+  if ( timeDelta < MAX_MILLIS_BEFORE_ERROR_SIGNAL) {
+    display.print("OK");
+  } else {
+    display.print("NO CONNECTION");
+  }
   display.update();
 }
