@@ -29,7 +29,7 @@ typedef enum { role_transmitter = 1, role_receiver } role_e;
 role_e role;
 const long MAX_MILLIS_BEFORE_ERROR_SIGNAL = 10000;
 long lastReceivedPacketTime = 0 - MAX_MILLIS_BEFORE_ERROR_SIGNAL;
-bool lastReceivedData = LOW;    //Start with relay off
+bool lastReceivedData = HIGH;    //Start with relay off. The relay is activated by LOW signal
 
 byte failureCount = 0;
 
@@ -100,6 +100,7 @@ void loop(void) {
   if ( role == role_receiver ) {
     handleReceiverRole();
   }
+  display.update();
 }
 
 /**
@@ -189,7 +190,6 @@ void handleTransmitterRole() {
     failureCount++;
   }
 
-  display.update();
 }
 
 //
@@ -201,7 +201,7 @@ void handleReceiverRole() {
   display.print("Relay: ");
 
   unsigned long receivedData = 0;
-  bool newPinMode = LOW;
+  bool newPinMode = lastReceivedData;
   byte pipeNum;
   while( radio.available(&pipeNum)) {              // Read all available payloads
     radio.read( &receivedData, PACKET_SIZE );
@@ -213,25 +213,16 @@ void handleReceiverRole() {
 
     if (receivedData >= 0 && receivedData < 256) {
       if (receivedData==1) {
-        newPinMode = HIGH;
-      } else if (receivedData==0) {
         newPinMode = LOW;
+      } else if (receivedData==0) {
+        newPinMode = HIGH;
       }
     }
-  }
-  display.setCursor(40,30);
 
-  if (newPinMode==HIGH) {
-    display.print("ON");
-  } else {
-    display.print("OFF");
+    //printf("Millis since last signal: %lu \n\r", timeDelta);
   }
-  if (lastReceivedData!=newPinMode) {
-    digitalWrite(functional_pin, newPinMode);
-  }
-  lastReceivedData = newPinMode;
   unsigned long timeDelta = millis()-lastReceivedPacketTime;
-  //printf("Millis since last signal: %lu \n\r", timeDelta);
+
   display.setCursor(0,15);
   display.print("Link: ");
   display.setCursor(35,15);
@@ -239,6 +230,19 @@ void handleReceiverRole() {
     display.print("OK");
   } else {
     display.print("NO CONNECTION");
+    newPinMode = HIGH;
   }
-  display.update();
+  printf("New pin mode %i\n", newPinMode);
+  display.setCursor(40,30);
+
+  if (newPinMode==HIGH) {
+    display.print("OFF");
+  } else {
+    display.print("ON");
+  }
+  if (lastReceivedData!=newPinMode) {
+    digitalWrite(functional_pin, newPinMode);
+  }
+  lastReceivedData = newPinMode;
+
 }
