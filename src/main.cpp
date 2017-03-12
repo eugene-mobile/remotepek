@@ -57,12 +57,15 @@ void setup(void) {
   printf_begin();
 
   radio.begin();
-  radio.setAutoAck(1);                    // Ensure autoACK is enabled
-  radio.enableAckPayload();               // Allow optional ack payloads
+  radio.setAutoAck(0);                    // Ensure autoACK
+  //radio.enableAckPayload();               // Allow optional ack payloads
   radio.enableDynamicPayloads();
-  //radio.setRetries(0,3);                 // Smallest time between retries, max no. of retries
+  radio.setRetries(0,15);                 // Smallest time between retries, max no. of retries
   radio.setPayloadSize(PACKET_SIZE);
-
+  radio.setChannel(0x77);                 //Select a channel
+  radio.setPALevel(RF24_PA_MAX);
+  radio.setDataRate(RF24_250KBPS);
+  radio.powerUp();
   if ( role == role_transmitter) {
     printf("\n\rPEK Transmitter\n\r");
 
@@ -71,6 +74,7 @@ void setup(void) {
 
     radio.openWritingPipe(addresses[0]);
     radio.openReadingPipe(1, addresses[1]);
+    radio.stopListening();
   } else {
     printf("\n\rPEK Receiver\n\r");
 
@@ -79,13 +83,12 @@ void setup(void) {
 
     radio.openWritingPipe(addresses[1]);
     radio.openReadingPipe(1, addresses[0]);
+    radio.startListening();
   }
-  radio.startListening();
   radio.printDetails();
-
   display.clear();
 
-  lastReceivedPacketTime = micros();
+  lastReceivedPacketTime = 0;
 }
 
 void loop(void) {
@@ -152,11 +155,15 @@ void handleTransmitterRole() {
     time = 256;
   }
 
-  printf("Sending sync time %lu \n\r", time);
+  //printf("Sending sync time %lu \n\r", time);
   boolean sendSuccess = sendAndWaitForAck(time);
   if (!sendSuccess) {
+    printf("Sync packet transmission failed");
     failureCount++;
   } else {
+    if (failureCount>MAX_PACKET_LOST_BEFORE_DISCONNECT) {
+      printf("%lu: Connection restored", millis());
+    }
     failureCount = 0;
   }
 
@@ -172,8 +179,10 @@ void handleTransmitterRole() {
   }
   display.print("OK");
   unsigned long controlData = digitalRead(functional_pin);
-  printf("Sending control packet %lu\n\r", controlData);
-
+  if (lastReceivedData!=controlData) {
+    printf("Sending control packet %lu\n\r", controlData);
+  }
+  lastReceivedData = controlData;
   display.setCursor(0,30);
   display.print("Contact: ");
   display.setCursor(50,30);
@@ -184,7 +193,7 @@ void handleTransmitterRole() {
   }
   sendSuccess = sendAndWaitForAck(controlData);
   if (sendSuccess) {
-    printf("Control send succesfully\n\r");
+    //printf("Control send succesfully\n\r");
   } else {
     printf("Control send failed\n\r");
     failureCount++;
@@ -232,7 +241,9 @@ void handleReceiverRole() {
     display.print("NO CONNECTION");
     newPinMode = HIGH;
   }
-  printf("New pin mode %i\n", newPinMode);
+  if (lastReceivedData!=newPinMode) {
+    printf("New pin mode %i\n", newPinMode);
+  }
   display.setCursor(40,30);
 
   if (newPinMode==HIGH) {
