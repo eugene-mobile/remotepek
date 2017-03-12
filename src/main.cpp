@@ -112,19 +112,20 @@ void loop(void) {
 bool sendAndWaitForAck(unsigned long data, bool debug = false) {
   bool sendSuccess = false;
   unsigned long startTime = millis();
+  if (debug) printf("%lu: Trying to send packet %lu \n\r", micros(), data);
   do {
-    if (debug) printf("%lu: Trying to send packet %lu \n\r", micros(), data);
+    if (debug) putchar('.');
     sendSuccess = radio.write(&data, PACKET_SIZE);
     unsigned long waitTime = millis()-startTime;
     if ( waitTime > 5000) {
-      if (debug) printf("%lu: Packet send timeout\n\r", micros());
+      if (debug) printf("\n\r%lu: Packet send timeout\n\r", micros());
       return false;
     }
     if (!sendSuccess) {
       delay(500);
     }
   } while (!sendSuccess);
-  if (debug) printf("%lu: Packet send success\n\r", micros());
+  if (debug) printf("\n\r%lu: Packet send success\n\r", micros());
   unsigned long ackPacket = 0;
   if (!radio.isAckPayloadAvailable()) {
     delay(100);
@@ -148,7 +149,6 @@ bool sendAndWaitForAck(unsigned long data, bool debug = false) {
 //
 void handleTransmitterRole() {
   display.print("PEK Transmitter");
-  radio.stopListening();
 
   unsigned long time = micros();
   if (time>0 && time<256) { //As 0 to 255 are control packets
@@ -156,13 +156,13 @@ void handleTransmitterRole() {
   }
 
   //printf("Sending sync time %lu \n\r", time);
-  boolean sendSuccess = sendAndWaitForAck(time);
+  boolean sendSuccess = sendAndWaitForAck(time, true);
   if (!sendSuccess) {
-    printf("Sync packet transmission failed");
+    printf("%lu: Sync packet transmission failed\n\r", micros());
     failureCount++;
   } else {
     if (failureCount>MAX_PACKET_LOST_BEFORE_DISCONNECT) {
-      printf("%lu: Connection restored", millis());
+      printf("%lu: Connection restored\n\r", micros());
     }
     failureCount = 0;
   }
@@ -172,7 +172,7 @@ void handleTransmitterRole() {
   display.setCursor(35,15);
   if (failureCount>=MAX_PACKET_LOST_BEFORE_DISCONNECT) {
     failureCount = MAX_PACKET_LOST_BEFORE_DISCONNECT;
-    printf("No connection to the reciever\n\r");
+    printf("%lu: No connection to the reciever\n\r", micros());
     display.print("NO CONNECTION");
     display.update();
     return;
@@ -180,7 +180,7 @@ void handleTransmitterRole() {
   display.print("OK");
   unsigned long controlData = digitalRead(functional_pin);
   if (lastReceivedData!=controlData) {
-    printf("Sending control packet %lu\n\r", controlData);
+    printf("%lu: Sending control packet %lu\n\r", micros(), controlData);
   }
   lastReceivedData = controlData;
   display.setCursor(0,30);
@@ -191,11 +191,11 @@ void handleTransmitterRole() {
   } else {
     display.print("ON");
   }
-  sendSuccess = sendAndWaitForAck(controlData);
+  sendSuccess = sendAndWaitForAck(controlData, true);
   if (sendSuccess) {
     //printf("Control send succesfully\n\r");
   } else {
-    printf("Control send failed\n\r");
+    printf("%lu: Control send failed\n\r", micros());
     failureCount++;
   }
 
@@ -217,7 +217,7 @@ void handleReceiverRole() {
     radio.flush_tx();
     delay(50);
     radio.writeAckPayload(pipeNum, &receivedData, PACKET_SIZE);
-    printf("Received and ACK'ed %lu \n\r", receivedData);
+    printf("%lu: Received and ACK'ed %lu \n\r", micros(), receivedData);
     lastReceivedPacketTime = millis();
 
     if (receivedData >= 0 && receivedData < 256) {
@@ -242,7 +242,7 @@ void handleReceiverRole() {
     newPinMode = HIGH;
   }
   if (lastReceivedData!=newPinMode) {
-    printf("New pin mode %i\n", newPinMode);
+    printf("%lu: New pin mode %i\n", micros(), newPinMode);
   }
   display.setCursor(40,30);
 
