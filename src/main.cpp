@@ -5,6 +5,7 @@
 #include "printf.h"
 #include "Adafruit_ssd1306syp.h"
 
+#define VERSION "0.1"
 #define SDA_PIN 8
 #define SCL_PIN 7
 Adafruit_ssd1306syp display(SDA_PIN,SCL_PIN);
@@ -67,7 +68,7 @@ void setup(void) {
   radio.setDataRate(RF24_250KBPS);
   radio.powerUp();
   if ( role == role_transmitter) {
-    printf("\n\rPEK Transmitter\n\r");
+    printf("\n\rPEK Transmitter ");
 
     pinMode(functional_pin,INPUT);
     digitalWrite(functional_pin,HIGH);
@@ -76,7 +77,7 @@ void setup(void) {
     radio.openReadingPipe(1, addresses[1]);
     radio.stopListening();
   } else {
-    printf("\n\rPEK Receiver\n\r");
+    printf("\n\rPEK Receiver ");
 
     pinMode(functional_pin,OUTPUT);
     digitalWrite(functional_pin, lastReceivedData);
@@ -85,6 +86,8 @@ void setup(void) {
     radio.openReadingPipe(1, addresses[0]);
     radio.startListening();
   }
+  printf(VERSION);
+  printf("\n\r");
   radio.printDetails();
   display.clear();
 
@@ -148,15 +151,15 @@ bool sendAndWaitForAck(unsigned long data, bool debug = false) {
 // Transmitter role
 //
 void handleTransmitterRole() {
-  display.print("PEK Transmitter");
-
+  display.print("PEK Transmitter ");
+  display.print(VERSION);
   unsigned long time = micros();
   if (time>0 && time<256) { //As 0 to 255 are control packets
     time = 256;
   }
 
   //printf("Sending sync time %lu \n\r", time);
-  boolean sendSuccess = sendAndWaitForAck(time, true);
+  boolean sendSuccess = sendAndWaitForAck(time, false);
   if (!sendSuccess) {
     printf("%lu: Sync packet transmission failed\n\r", micros());
     failureCount++;
@@ -205,7 +208,8 @@ void handleTransmitterRole() {
 // Receiver role
 //
 void handleReceiverRole() {
-  display.print("PEK Receiver");
+  display.print("PEK Receiver ");
+  display.print(VERSION);
   display.setCursor(0,30);
   display.print("Relay: ");
 
@@ -255,5 +259,6 @@ void handleReceiverRole() {
     digitalWrite(functional_pin, newPinMode);
   }
   lastReceivedData = newPinMode;
-
+  display.setCursor(0, 45);
+  display.print(receivedData);
 }
