@@ -5,6 +5,8 @@
 #include "printf.h"
 #include "Adafruit_ssd1306syp.h"
 
+#define VERSION "0.1"
+
 #define SDA_PIN 8
 #define SCL_PIN 7
 Adafruit_ssd1306syp display(SDA_PIN,SCL_PIN);
@@ -31,7 +33,7 @@ const long MAX_MILLIS_BEFORE_ERROR_SIGNAL = 10000;
 long lastReceivedPacketTime = 0 - MAX_MILLIS_BEFORE_ERROR_SIGNAL;
 bool lastReceivedData = HIGH;    //Start with relay off. The relay is activated by LOW signal
 
-byte failureCount = 0;
+byte failureCount = MAX_PACKET_LOST_BEFORE_DISCONNECT + 1;
 
 void handleReceiverRole(void);
 void handleTransmitterRole(void);
@@ -58,16 +60,16 @@ void setup(void) {
 
   radio.begin();
   radio.setAutoAck(0);                    // Ensure autoACK
-  //radio.enableAckPayload();               // Allow optional ack payloads
+  radio.enableAckPayload();               // Allow optional ack payloads
   radio.enableDynamicPayloads();
   radio.setRetries(0,15);                 // Smallest time between retries, max no. of retries
   radio.setPayloadSize(PACKET_SIZE);
   radio.setChannel(0x77);                 //Select a channel
   radio.setPALevel(RF24_PA_MAX);
-  radio.setDataRate(RF24_250KBPS);
+  radio.setDataRate(RF24_1MBPS);          // WARNING! enableAckPayload (and therefore auto ack) does not work on on 512KBPS!
   radio.powerUp();
   if ( role == role_transmitter) {
-    printf("\n\rPEK Transmitter\n\r");
+    printf("\n\rPEK Transmitter v.");
 
     pinMode(functional_pin,INPUT);
     digitalWrite(functional_pin,HIGH);
@@ -76,7 +78,7 @@ void setup(void) {
     radio.openReadingPipe(1, addresses[1]);
     radio.stopListening();
   } else {
-    printf("\n\rPEK Receiver\n\r");
+    printf("\n\rPEK Receiver v.");
 
     pinMode(functional_pin,OUTPUT);
     digitalWrite(functional_pin, lastReceivedData);
@@ -85,6 +87,8 @@ void setup(void) {
     radio.openReadingPipe(1, addresses[0]);
     radio.startListening();
   }
+  printf(VERSION);
+  printf("\n\r");
   radio.printDetails();
   display.clear();
 
@@ -125,10 +129,15 @@ bool sendAndWaitForAck(unsigned long data, bool debug = false) {
       delay(500);
     }
   } while (!sendSuccess);
-  if (debug) printf("\n\r%lu: Packet send success\n\r", micros());
+
+  unsigned long waitTime = millis()-startTime;
   unsigned long ackPacket = 0;
-  if (!radio.isAckPayloadAvailable()) {
-    delay(100);
+  while (!radio.isAckPayloadAvailable()) {
+    if ( waitTime > 5000) {
+      if (debug) printf("\n\r%lu: Packet send timeout\n\r", micros());
+      return false;
+    }
+    delay(10);
   }
   while (radio.isAckPayloadAvailable()) {
       radio.read( &ackPacket, PACKET_SIZE);
@@ -141,6 +150,7 @@ bool sendAndWaitForAck(unsigned long data, bool debug = false) {
         delay(50);
       }
   }
+  if (debug) printf("\n\r%lu: Packet send success\n\r", micros());
   return true;
 }
 
@@ -148,7 +158,8 @@ bool sendAndWaitForAck(unsigned long data, bool debug = false) {
 // Transmitter role
 //
 void handleTransmitterRole() {
-  display.print("PEK Transmitter");
+  display.print("PEK Transmitter ");
+  //display.print(VERSION);
 
   unsigned long time = micros();
   if (time>0 && time<256) { //As 0 to 255 are control packets
@@ -205,7 +216,8 @@ void handleTransmitterRole() {
 // Receiver role
 //
 void handleReceiverRole() {
-  display.print("PEK Receiver");
+  display.print("PEK Receiver ");
+  display.print(VERSION);
   display.setCursor(0,30);
   display.print("Relay: ");
 
@@ -255,5 +267,6 @@ void handleReceiverRole() {
     digitalWrite(functional_pin, newPinMode);
   }
   lastReceivedData = newPinMode;
-
+  display.setCursor(0, 45);
+  display.print(lastReceivedData);
 }
