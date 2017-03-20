@@ -32,7 +32,7 @@ const long MAX_MILLIS_BEFORE_ERROR_SIGNAL = 10000;
 long lastReceivedPacketTime = 0 - MAX_MILLIS_BEFORE_ERROR_SIGNAL;
 bool lastReceivedData = HIGH;    //Start with relay off. The relay is activated by LOW signal
 
-byte failureCount = 0;
+byte failureCount = MAX_PACKET_LOST_BEFORE_DISCONNECT+1;
 
 void handleReceiverRole(void);
 void handleTransmitterRole(void);
